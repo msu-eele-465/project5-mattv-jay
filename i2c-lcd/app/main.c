@@ -30,11 +30,6 @@ char key = '0';
 
 unsigned int time_since_active = 3;
 
-void enable_lcd(void);
-void send_cmd(unsigned char cmd);
-void send_char(unsigned char character);
-void send_string(const char *str);
-
 /**
  * Initializes all GPIO ports.
  */
@@ -88,7 +83,7 @@ void init_i2c(void)
  */
 int main(void)
 {
-    uint8_t cursor = 0b00001100;
+    // uint8_t cursor = 0b00001100;
 
     const char *PATTERNS[] = { "static",       "toggle",        "up counter",     "in and out",
                                "down counter", "rotate 1 left", "rotate 7 right", "fill left" };
@@ -106,34 +101,81 @@ int main(void)
 
     __enable_interrupt(); // Enable Maskable IRQs
 
+    unsigned int state = 0; //0 = normal, 1 = window size input, 2 = LED pattern input 
+    unsigned int pattern_num = 0;
+    char temp_out[] = "00.0";
+    char n = '3';
+
     while (true)
     {
         if (unlocked && key != '\0')
         {
-            if (key == '9')
+            if (key == '*') 
             {
-                cursor ^= BIT1;
-                send_cmd(cursor);
-                __delay_cycles(100); // Wait 100 micro seconds
-            } 
-            else if (key == 'C') 
-            {
-                cursor ^= BIT0;
-                send_cmd(cursor);
-                __delay_cycles(100); // Wait 100 micro seconds
-            }
-            else if ((key - '0') >= 0 && (key - '0') < 8)
-            {
+                state = 1;
                 __disable_interrupt();
                 send_cmd(0x01);
                 __delay_cycles(10000); // Wait 1.6 ms
-                send_string(PATTERNS[(unsigned int)(key - '0')]);
+                send_string("set window size");
                 __enable_interrupt();
             }
-            send_cmd(0xCF);
-            send_char(key);
-            send_cmd(0xCF);
+            else if (key == '#') 
+            {
+                state = 2;
+                __disable_interrupt();
+                send_cmd(0x01);
+                __delay_cycles(10000); // Wait 1.6 ms
+                send_string("set pattern");
+                __enable_interrupt();
+            }
+
+            if (key > '0' && key <= '9')
+            {
+                if (state == 1) 
+                {
+                    n = key;
+                    __disable_interrupt();
+                    send_cmd(0x01);
+                    __delay_cycles(10000); // Wait 1.6 ms
+                    send_string(PATTERNS[pattern_num]);
+                    __enable_interrupt();
+                    state = 0;
+                } 
+                else if (state == 2) 
+                {
+                    if (key < '8') 
+                    {
+                        pattern_num = (unsigned int)(key - '0');
+                        __disable_interrupt();
+                        send_cmd(0x01);
+                        __delay_cycles(10000); // Wait 1.6 ms
+                        send_string(PATTERNS[pattern_num]);
+                        __enable_interrupt();
+                        state = 0;
+                    }
+                }
+            }
+
+            send_cmd(0xC0);
+            send_string("T=");
+            send_string(temp_out);
+            send_cmd(0xCD);
+            send_string("N=");
+            send_char(n);
             key = '\0';
+
+            // if (key == '9')
+            // {
+            //     cursor ^= BIT1;
+            //     send_cmd(cursor);
+            //     __delay_cycles(100); // Wait 100 micro seconds
+            // } 
+            // else if (key == 'C') 
+            // {
+            //     cursor ^= BIT0;
+            //     send_cmd(cursor);
+            //     __delay_cycles(100); // Wait 100 micro seconds
+            // }
         }
     }
 }
