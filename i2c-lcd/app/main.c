@@ -30,6 +30,11 @@ char key = '0';
 
 unsigned int time_since_active = 3;
 
+uint8_t buffer[3] = {0};
+unsigned int index;
+
+char temp_out[] = "00.0";
+
 /**
  * Initializes all GPIO ports.
  */
@@ -103,7 +108,6 @@ int main(void)
 
     unsigned int state = 0; //0 = normal, 1 = window size input, 2 = LED pattern input 
     unsigned int pattern_num = 0;
-    char temp_out[] = "00.0";
     char n = '3';
 
     while (true)
@@ -167,20 +171,19 @@ int main(void)
             send_string("N=");
             send_char(n);
             key = '\0';
-
-            // if (key == '9')
-            // {
-            //     cursor ^= BIT1;
-            //     send_cmd(cursor);
-            //     __delay_cycles(100); // Wait 100 micro seconds
-            // } 
-            // else if (key == 'C') 
-            // {
-            //     cursor ^= BIT0;
-            //     send_cmd(cursor);
-            //     __delay_cycles(100); // Wait 100 micro seconds
-            // }
         }
+        if (unlocked)
+        {
+            send_cmd(0xC0);
+            send_string("T=");
+            send_string(temp_out);
+            send_char(0xDF);
+            send_char('C');
+        }
+        buffer[0] = 0;
+        buffer[1] = 0;
+        buffer[2] = 0;
+        index = 0;
     }
 }
 
@@ -208,18 +211,25 @@ __interrupt void ISR_TB1_OVERFLOW(void)
  * Stores value received over I2C in global var "key".
  * If 'U' is received over I2C, set the "unlocked" var.
  */
-char data_in;
+uint8_t data_in;
 #pragma vector = EUSCI_B0_VECTOR
 __interrupt void EUSCI_B0_I2C_ISR(void)
 {
     data_in = UCB0RXBUF;
-    if (data_in == 'U')
+    buffer[index++] = data_in;
+    if (buffer[2] != 0 && unlocked) 
+    {
+        temp_out[0] = (char)buffer[0];
+        temp_out[1] = (char)buffer[1];
+        temp_out[3] = (char)buffer[2];
+    }
+    else if (data_in == 'U')
     {
         unlocked = true;
     }
     else
     {
-        key = data_in;
+        key = (char)data_in;
     }
     P2OUT |= BIT0;
     time_since_active = 0;
