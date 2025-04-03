@@ -32,6 +32,8 @@ volatile uint8_t i2c_tx_data[2];
 volatile uint8_t i2c_tx_index = 0;
 volatile uint8_t i2c_rx_data = 0;
 
+unsigned int state = 0; // 0 = normal, 1 = window size input, 2 = LED pattern input
+
 void i2c_init(void);
 void i2c_write_byte_interrupt(uint8_t addr, uint8_t byte);
 void lcd_write(uint8_t byte);
@@ -239,8 +241,20 @@ void handle_keypress(uint8_t key)
     }
     else if (key != '\0')
     {
-        send_to_led(key);
-        lcd_write(key);
+        if (state == 2) 
+        {
+            lcd_write(key);
+            send_to_led(key);
+            state = 0;
+        } 
+        else 
+        {
+            lcd_write(key);
+        }
+        if ((char)key == '#')
+        {
+            state = 2;
+        }
     }
 }
 
