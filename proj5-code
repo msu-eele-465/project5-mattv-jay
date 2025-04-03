@@ -1,0 +1,129 @@
+#include <msp430fr2310.h>
+#include <stdint.h>
+#include "lcd_driver.h"
+
+#define ADC_CHANNEL BIT1  // LM19 connected to P1.1 (A1)
+#define SAMPLE_WINDOW 3   // Moving average window size
+#define V_REF 3.3         // Reference voltage for ADC
+
+volatile uint16_t temp_samples[SAMPLE_WINDOW] = {0};
+volatile uint8_t sample_index = 0;
+volatile uint8_t samples_collected = 0;
+volatile uint8_t display_fahrenheit = 0;
+volatile uint8_t button_pressed = 0;
+
+void init_adc(void);
+void init_timer(void);
+void init_button(void);
+void start_conversion(void);
+void update_display(void);
+float convert_to_celsius(uint16_t adc_value);
+float convert_to_fahrenheit(float temp_celsius);
+
+int main(void) {
+    WDTCTL = WDTPW | WDTHOLD;  // Stop watchdog
+    
+    init_adc();
+    init_timer();
+    init_button();
+    init_lcd();
+    
+    __enable_interrupt();
+    
+    while (1) {
+        __low_power_mode_3();  // Enter low-power mode
+    }
+}
+
+void init_adc(void) {
+    P1SEL0 |= ADC_CHANNEL;
+    P1SEL1 |= ADC_CHANNEL;
+    
+    ADCCTL0 = ADCSHT_2 | ADCON;
+    ADCCTL1 = ADCSHP;
+    ADCCTL2 = ADCRES_2;
+    ADCMCTL0 = ADCINCH_1;
+    
+    ADCIE |= ADCIE0;
+}
+
+void init_timer(void) {
+    TB0CCTL0 = CCIE;
+    TB0CCR0 = 16384;  // Approx. 0.5s delay using ACLK
+    TB0CTL = TBSSEL_1 | MC_1 | ID_0;
+}
+
+void init_button(void) {
+    P1DIR &= ~BIT3;
+    P1REN |= BIT3;
+    P1OUT |= BIT3;
+    P1IE |= BIT3;
+    P1IES |= BIT3;
+    P1IFG &= ~BIT3;
+}
+
+void start_conversion(void) {
+    ADCCTL0 |= ADCENC | ADCSC;
+}
+
+#pragma vector = TIMER0_B0_VECTOR
+__interrupt void TIMER_ISR(void) {
+    start_conversion();
+}
+
+#pragma vector = ADC_VECTOR
+__interrupt void ADC_ISR(void) {
+    uint16_t adc_value = ADCMEM0;
+    
+    temp_samples[sample_index] = adc_value;
+    sample_index = (sample_index + 1) % SAMPLE_WINDOW;
+    
+    if (samples_collected < SAMPLE_WINDOW) {
+        samples_collected++;
+    }
+    
+    update_display();
+}
+
+void update_display(void) {
+    if (samples_collected < SAMPLE_WINDOW) return;
+    
+    uint32_t sum = 0;
+    for (uint8_t i = 0; i < SAMPLE_WINDOW; i++) {
+        sum += temp_samples[i];
+    }
+    
+    float avg_celsius = convert_to_celsius(sum / SAMPLE_WINDOW);
+    
+    char buffer[16];
+    if (display_fahrenheit) {
+        float avg_fahrenheit = convert_to_fahrenheit(avg_celsius);
+        snprintf(buffer, sizeof(buffer), "%.1f F", avg_fahrenheit);
+    } else {
+        snprintf(buffer, sizeof(buffer), "%.1f C", avg_celsius);
+    }
+    
+    send_cmd(0x01);  // Clear LCD
+    send_string(buffer);
+}
+
+float convert_to_celsius(uint16_t adc_value) {
+    float voltage = (adc_value * V_REF) / 1023.0;
+    return (voltage - 0.5) * 100.0;
+}
+
+float convert_to_fahrenheit(float temp_celsius) {
+    return (temp_celsius * 9.0 / 5.0) + 32.0;
+}
+
+#pragma vector = PORT1_VECTOR
+__interrupt void BUTTON_ISR(void) {
+    if (!button_pressed) {
+        button_pressed = 1;
+        display_fahrenheit ^= 1;
+        update_display();
+        __delay_cycles(50000);  // Debounce delay
+        button_pressed = 0;
+    }
+    P1IFG &= ~BIT3;
+}
