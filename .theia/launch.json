@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "CCS Debug",
+            "type": "ccs-debug",
+            "request": "launch"
+        },
+        {
+            "name": "controller",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "controller",
+                "resourceId": "/controller"
+            }
+        }
+    ]
+}
