@@ -110,28 +110,30 @@ int main(void)
     {
         if (unlocked && key != '\0')
         {
-            if (key == '*') 
+            if (state == 0)
             {
-                state = 1;
-                __disable_interrupt();
-                send_cmd(0x01);
-                __delay_cycles(10000); // Wait 1.6 ms
-                send_string("set window size");
-                __enable_interrupt();
+                if (key == '*') 
+                {
+                    state = 1;
+                    __disable_interrupt();
+                    send_cmd(0x01);
+                    __delay_cycles(10000); // Wait 1.6 ms
+                    send_string("set window size");
+                    __enable_interrupt();
+                }
+                else if (key == '#') 
+                {
+                    state = 2;
+                    __disable_interrupt();
+                    send_cmd(0x01);
+                    __delay_cycles(10000); // Wait 1.6 ms
+                    send_string("set pattern");
+                    __enable_interrupt();
+                }
             }
-            else if (key == '#') 
+            else if (state == 1) 
             {
-                state = 2;
-                __disable_interrupt();
-                send_cmd(0x01);
-                __delay_cycles(10000); // Wait 1.6 ms
-                send_string("set pattern");
-                __enable_interrupt();
-            }
-
-            if (key > '0' && key <= '9')
-            {
-                if (state == 1) 
+                if (key > '0' && key <= '9')
                 {
                     n = key;
                     __disable_interrupt();
@@ -140,25 +142,27 @@ int main(void)
                     send_string(PATTERNS[pattern_num]);
                     __enable_interrupt();
                     state = 0;
-                } 
-                else if (state == 2) 
+                }
+            } 
+            else if (state == 2) 
+            {
+                if (key >= '0' && key < '8') 
                 {
-                    if (key < '8') 
-                    {
-                        pattern_num = (unsigned int)(key - '0');
-                        __disable_interrupt();
-                        send_cmd(0x01);
-                        __delay_cycles(10000); // Wait 1.6 ms
-                        send_string(PATTERNS[pattern_num]);
-                        __enable_interrupt();
-                        state = 0;
-                    }
+                    pattern_num = (unsigned int)(key - '0');
+                    __disable_interrupt();
+                    send_cmd(0x01);
+                    __delay_cycles(10000); // Wait 1.6 ms
+                    send_string(PATTERNS[pattern_num]);
+                    __enable_interrupt();
+                    state = 0;
                 }
             }
 
             send_cmd(0xC0);
             send_string("T=");
             send_string(temp_out);
+            send_char(0xDF);
+            send_char('C');
             send_cmd(0xCD);
             send_string("N=");
             send_char(n);
